@@ -382,7 +382,7 @@ function formatWhatsAppDisplay(rawDigits) {
     const rest = digits.slice(2);
     return `+62 ${rest.slice(0, 3)}-${rest.slice(3, 7)}-${rest.slice(7)}`;
   }
-  return digits ? `+${digits}` : '+62 819-9344-6088';
+  return digits ? `+${digits}` : '+62 896-0278-2482';
 }
 
 function buildWhatsAppUrl(phoneDigits, messageText) {
