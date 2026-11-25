@@ -2,6 +2,6 @@ User-agent: *
 Allow: /
 Allow: /favicon.ico
 Disallow: /api/
-Disallow: /.vercel/
+Disallow: /*.json$
 
 Sitemap: https://restucommunity.com/sitemap.xml
