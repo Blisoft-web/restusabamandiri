@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Allow: /favicon.ico
+Disallow: /api/
+Disallow: /*.json$
+
+Sitemap: https://restusabamandiri.com/sitemap.xml
