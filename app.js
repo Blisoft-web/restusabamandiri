@@ -907,6 +907,11 @@ async function hydrateFromGoogleSheets() {
   renderSections(mergedSections);
   renderServicesAndLegality(parsedData.services, mergedConfig);
   renderTeam(parsedData.team, mergedConfig.tampilkan_tim);
+  applyThemeAndConfig(mergedConfig);
+  renderNavigation(parsedData.nav);
+  renderSections(mergedSections);
+  renderServicesAndLegality(parsedData.services, mergedConfig);
+  renderTeam(parsedData.team, mergedConfig.tampilkan_tim);
 
   if (window.location.hash) {
     window.requestAnimationFrame(() => scrollToHashTarget(window.location.hash));
@@ -930,5 +935,221 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Restore page visibility when returning via browser back-forward cache (iOS Safari & Android Chrome)
 window.addEventListener('pageshow', () => {
+  function extractGallerySlides(servicesRows, sectionsRows) {
+  const slides = [];
+
+  if (Array.isArray(servicesRows)) {
+    servicesRows
+      .filter((row) => String(row.tipe || '').trim().toLowerCase() === 'galeri')
+      .filter((row) => String(row.status_izin || 'tampil').trim().toLowerCase() !== 'sembunyi')
+      .sort((a, b) => Number(a.urutan || 999) - Number(b.urutan || 999))
+      .forEach((row) => {
+        const rawUrl = String(row.ringkasan || '').trim();
+        if (rawUrl) {
+          slides.push({
+            url: optimizeImageUrl(rawUrl),
+            badge: String(row.badge || 'Dokumentasi K3').trim(),
+            caption: String(row.judul || 'Operasional CV. Restu Saba Mandiri').trim()
+          });
+        }
+      });
+  }
+
+  if (slides.length === 0 && Array.isArray(sectionsRows)) {
+    const heroRow = sectionsRows.find(
+      (row) => String(row.section_id || '').trim().toLowerCase() === 'beranda'
+    );
+    if (heroRow && heroRow.url_gambar) {
+      String(heroRow.url_gambar)
+        .split('|')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .forEach((url, index) => {
+          slides.push({
+            url: optimizeImageUrl(url),
+            badge: 'Dokumentasi Lapangan',
+            caption: `Dokumentasi Operasional #${index + 1}`
+          });
+        });
+    }
+  }
+
+  if (slides.length === 0 && FALLBACK_STATE.sections.beranda.url_gambar) {
+    slides.push({
+      url: optimizeImageUrl(FALLBACK_STATE.sections.beranda.url_gambar),
+      badge: 'Dokumentasi Operasional',
+      caption: 'CV. Restu Saba Mandiri — Standar K3 & Lingkungan'
+    });
+  }
+
+  return slides;
+}
+
+function initHeroGallerySlider(slides) {
+  const wrapper = document.getElementById('hero-gallery-wrapper');
+  const frame = document.getElementById('hero-gallery-frame');
+  const canvas = document.getElementById('hero-gallery-canvas');
+  const fallbackBg = document.getElementById('hero-gallery-fallback-bg');
+  const shield = document.getElementById('hero-gallery-shield');
+  const badgeEl = document.getElementById('hero-gallery-badge');
+  const captionEl = document.getElementById('hero-gallery-caption');
+  const controls = document.getElementById('hero-gallery-controls');
+  const counterEl = document.getElementById('hero-gallery-counter');
+  const prevBtn = document.getElementById('gallery-prev-btn');
+  const nextBtn = document.getElementById('gallery-next-btn');
+
+  if (!wrapper || !frame || !canvas || !slides || slides.length === 0) {
+    if (wrapper) wrapper.style.display = 'none';
+    return;
+  }
+
+  wrapper.style.display = 'block';
+  const ctx = canvas.getContext('2d');
+  let currentIndex = 0;
+  let autoSlideTimer = null;
+  let touchStartX = 0;
+  let lastTapTime = 0;
+
+  const blockAction = (e) => {
+    e.preventDefault();
+    return false;
+  };
+
+  [frame, shield, canvas].forEach((el) => {
+    el.addEventListener('contextmenu', blockAction);
+    el.addEventListener('dragstart', blockAction);
+    el.addEventListener('selectstart', blockAction);
+    el.addEventListener('gesturestart', blockAction);
+    el.addEventListener('dblclick', blockAction);
+  });
+
+  shield.addEventListener('wheel', (e) => {
+    if (e.ctrlKey) e.preventDefault();
+  }, { passive: false });
+
+  shield.addEventListener('touchstart', (e) => {
+    if (e.touches.length > 1) {
+      e.preventDefault();
+      return;
+    }
+    touchStartX = e.changedTouches[0].screenX;
+    stopAutoSlide();
+  }, { passive: false });
+
+  shield.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTapTime < 320) {
+      e.preventDefault();
+    }
+    lastTapTime = now;
+
+    const touchEndX = e.changedTouches[0].screenX;
+    const deltaX = touchEndX - touchStartX;
+    if (slides.length > 1 && Math.abs(deltaX) > 40) {
+      if (deltaX < 0) goToSlide(currentIndex + 1);
+      else goToSlide(currentIndex - 1);
+    }
+    startAutoSlide();
+  }, { passive: false });
+
+  function drawCoverImageToCanvas(img) {
+    const targetW = canvas.width;
+    const targetH = canvas.height;
+    const imgRatio = img.naturalWidth / img.naturalHeight;
+    const canvasRatio = targetW / targetH;
+    let drawW = targetW;
+    let drawH = targetH;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (imgRatio > canvasRatio) {
+      drawW = targetH * imgRatio;
+      offsetX = (targetW - drawW) / 2;
+    } else {
+      drawH = targetW / imgRatio;
+      offsetY = (targetH - drawH) / 2;
+    }
+
+    ctx.clearRect(0, 0, targetW, targetH);
+    ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+  }
+
+  function preloadNextSlide(nextIdx) {
+    if (slides.length <= 1) return;
+    const preloader = new Image();
+    preloader.referrerPolicy = 'no-referrer';
+    preloader.src = slides[nextIdx].url;
+  }
+
+  function renderSlide(index) {
+    const total = slides.length;
+    currentIndex = ((index % total) + total) % total;
+    const activeSlide = slides[currentIndex];
+
+    badgeEl.textContent = activeSlide.badge;
+    captionEl.textContent = activeSlide.caption;
+    counterEl.textContent = `${currentIndex + 1} / ${total}`;
+
+    const imgLoader = new Image();
+    imgLoader.crossOrigin = 'anonymous';
+    imgLoader.referrerPolicy = 'no-referrer';
+
+    imgLoader.onload = () => {
+      fallbackBg.classList.remove('is-active');
+      canvas.style.opacity = '1';
+      drawCoverImageToCanvas(imgLoader);
+      preloadNextSlide((currentIndex + 1) % total);
+    };
+
+    imgLoader.onerror = () => {
+      canvas.style.opacity = '0';
+      fallbackBg.style.backgroundImage = `url("${activeSlide.url}")`;
+      fallbackBg.classList.add('is-active');
+      preloadNextSlide((currentIndex + 1) % total);
+    };
+
+    imgLoader.src = activeSlide.url;
+  }
+
+  function goToSlide(nextIndex) {
+    renderSlide(nextIndex);
+  }
+
+  function startAutoSlide() {
+    if (slides.length <= 1) return;
+    stopAutoSlide();
+    autoSlideTimer = setInterval(() => {
+      goToSlide(currentIndex + 1);
+    }, 4000);
+  }
+
+  function stopAutoSlide() {
+    if (autoSlideTimer) {
+      clearInterval(autoSlideTimer);
+      autoSlideTimer = null;
+    }
+  }
+
+  if (slides.length > 1) {
+    controls.hidden = false;
+    prevBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      goToSlide(currentIndex - 1);
+      startAutoSlide();
+    });
+    nextBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      goToSlide(currentIndex + 1);
+      startAutoSlide();
+    });
+    frame.addEventListener('mouseenter', stopAutoSlide);
+    frame.addEventListener('mouseleave', startAutoSlide);
+    startAutoSlide();
+  } else {
+    controls.hidden = true;
+  }
+
+  renderSlide(0);
+}
   hideLogoLoader();
 });
