@@ -936,6 +936,8 @@ document.addEventListener('DOMContentLoaded', () => {
 // Restore page visibility when returning via browser back-forward cache (iOS Safari & Android Chrome)
 window.addEventListener('pageshow', () => {
   hideLogoLoader();
+});
+
   function extractGallerySlides(servicesRows, sectionsRows) {
   const slides = [];
 
@@ -1152,4 +1154,3 @@ function initHeroGallerySlider(slides) {
 
   renderSlide(0);
 }
-});
